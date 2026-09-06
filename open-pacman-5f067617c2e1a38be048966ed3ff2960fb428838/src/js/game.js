@@ -113,6 +113,7 @@ function movePacman( game ) {
 function decideGhost( game, g ) {
   const grid = game.grid;
   const p = game.pacman;
+  const pd = DIRS[ p.dir ] || { x: 0, y: 0 };
 
   const options = Object.keys( DIRS ).filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
@@ -120,24 +121,97 @@ function decideGhost( game, g ) {
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
+  switch ( g.kind ) {
+    case 'blinky':
+      g.dir = chooseDirTowards( grid, g, { x: Math.round( p.x ), y: Math.round( p.y ) }, choices );
+      break;
+    case 'pinky':
+      g.dir = chooseDirTowards( grid, g, pinkyTarget( Math.round( p.x ), Math.round( p.y ), pd ), choices );
+      break;
+    case 'inky':
+      g.dir = chooseDirTowards( grid, g, inkyTarget( game, Math.round( p.x ), Math.round( p.y ), pd ), choices );
+      break;
+    case 'clyde':
+      g.dir = clydeDecision( grid, g, { x: Math.round( p.x ), y: Math.round( p.y ) }, choices );
+      break;
+    default:
+      // Safe fallback: random among legal moves
+      g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+  }
+}
+
+// Elegir dirección hacia un objetivo fijo (posición de celda objetivo).
+function chooseDirTowards( grid, ghost, target, choices ) {
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    const nx = ghost.x + d.x;
+    const ny = ghost.y + d.y;
+    const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
+    }
+  }
+  return best;
+}
+
+// Pinky: emboscador — objetivo varias celdas adelante de Pac-Man.
+function pinkyTarget( px, py, pd ) {
+  // 4 celdas adelante en la dirección actual de Pac-Man
+  return { x: px + 4 * pd.x, y: py + 4 * pd.y };
+}
+
+// Inky: flanqueador — objetivo derivado de "adelante de Pac-Man" + posición de Blinky.
+// Fórmula clásica: target = 2 * (4-ahead) - Blinky_position
+function inkyTarget( game, px, py, pd ) {
+  const blinky = game.ghosts[ 0 ]; // Blinky siempre está en ghosts[0]
+  const ahead = { x: px + 4 * pd.x, y: py + 4 * pd.y };
+  // Double-vector: duplicar el vector "4-ahead" y restar la posición de Blinky
+  const blinkyRounded = { x: Math.round( blinky.x ), y: Math.round( blinky.y ) };
+  return { x: 2 * ahead.x - blinkyRounded.x, y: 2 * ahead.y - blinkyRounded.y };
+}
+
+// Clyde: persigue cuando está lejos, se esconde cuando está cerca.
+function clydeDecision( grid, g, p, choices ) {
+  const gx = Math.round( g.x );
+  const gy = Math.round( g.y );
+  const px = p.x;
+  const py = p.y;
+  const dist = Math.abs( gx - px ) + Math.abs( gy - py );
+
+  if ( dist > 8 ) {
+    // Persigue a Pac-Man
     let best = choices[ 0 ];
     let bestDist = Infinity;
     for ( const dir of choices ) {
       const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
+      const nx = gx + d.x;
+      const ny = gy + d.y;
+      const d2 = Math.abs( nx - px ) + Math.abs( ny - py );
+      if ( d2 < bestDist ) {
+        bestDist = d2;
         best = dir;
       }
     }
-    g.dir = best;
+    return best;
   } else {
-    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+    // Cuando está cerca, ir a su área de scatter (esquina inferior-derecha)
+    const scatterTarget = { x: 27, y: 31 };
+    let best = choices[ 0 ];
+    let bestDist = Infinity;
+    for ( const dir of choices ) {
+      const d = DIRS[ dir ];
+      const nx = gx + d.x;
+      const ny = gy + d.y;
+      const d2 = Math.abs( nx - scatterTarget.x ) + Math.abs( ny - scatterTarget.y );
+      if ( d2 < bestDist ) {
+        bestDist = d2;
+        best = dir;
+      }
+    }
+    return best;
   }
 }
 
