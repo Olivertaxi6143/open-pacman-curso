@@ -1,4 +1,4 @@
-# OpenCode AGENTS.md — Pac-Man MVP
+# OpenCode AGENTS.md — Pac-Man MVP!!
 
 ## Manual smoke test
 Open `src/index.html` in a browser. No build, no install, no `npm` commands.
