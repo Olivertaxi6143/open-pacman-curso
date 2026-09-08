@@ -1,0 +1,74 @@
+schema: gentle-ai.sdd-preproposal/v1
+revision: 10
+project: 05-open-pacman
+change: pacman-gameplay-fix
+requested_change_name: "tiene muchos errres el juego el pacma no come todo a su paso los fantasmas se pierden fueran de los carriles por donde tienen que ir pacma y los fantasmas el fantaspa pasa al lado de pacma y no lo mata revisa toda la logica del juego que funcione a la perfeccion"
+artifact_store: openspec
+execution_mode: interactive
+delivery_strategy: ask-on-risk
+review_budget_lines: 800
+exploration:
+  status: completed
+  artifact: openspec/changes/pacman-gameplay-fix/exploration.md
+research:
+  status: completed
+  requested: true
+  classes: [open-web]
+  selection_token: open-web
+  outcome: done
+  artifact: openspec/changes/pacman-gameplay-fix/research.md
+  admission:
+    capability_envelope: gentle-ai.sdd-research-capability/v1
+    selected_source_class: open-web
+    exact_declared_grants:
+      open-web: [webfetch]
+      documentation: []
+    result: admitted
+    verified_at: "2026-09-08"
+  evidence:
+    sources: [OW-001, OW-002, OW-003, OW-004]
+    validated_claims: [claim-001, claim-002, claim-003, claim-004, claim-005, claim-006]
+recovery:
+  required: false
+  action: research-reopened-after-valid-open-web-grant
+  decision: grant_admitted
+  status: resolved
+  grant: open-web=[webfetch]
+  runtime_config: C:\Users\olive\.config\opencode\opencode.json
+product_decisions: confirmed
+proposal_ready: true
+proposal:
+  status: completed
+  artifact: openspec/changes/pacman-gameplay-fix/proposal.md
+  based_on:
+    exploration: completed
+    research: completed
+  pending_prompt: null
+  next: null
+spec:
+  status: completed
+  artifact_root: openspec/changes/pacman-gameplay-fix/specs
+  artifacts:
+    - openspec/changes/pacman-gameplay-fix/specs/pacman-collection-and-collision/spec.md
+    - openspec/changes/pacman-gameplay-fix/specs/ghost-navigation-and-behavior/spec.md
+    - openspec/changes/pacman-gameplay-fix/specs/feature-branch-chain-delivery/spec.md
+  capabilities:
+    - pacman-collection-and-collision
+    - ghost-navigation-and-behavior
+    - feature-branch-chain-delivery
+  format: full-new
+  based_on:
+    proposal: completed
+    research: completed
+  validated: true
+  next: design
+design:
+  status: completed
+  artifact: openspec/changes/pacman-gameplay-fix/design.md
+  based_on:
+    proposal: completed
+    spec: completed
+    research: completed
+  validated: true
+  next: tasks
+next: tasks

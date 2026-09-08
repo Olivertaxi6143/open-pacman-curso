@@ -1,0 +1,23 @@
+## SDD Result Contract
+
+status: completed
+executive_summary: |
+  Re-explored the complete Pac-Man game logic in the browser-based vanilla JS MVP after gatekeeper review of factual drift in the prior exploration. Three categories of issue were re-evaluated against current source:
+
+  1. **Dot collection**: Dots are eaten only when `aligned()` triggers periodically (every ~25 frames for Pac-Man at 0.08 cells/frame). Dots traversed between alignment points are skipped. The prior claim that this was an alignment gate was correct in observation but the prior exploration incorrectly framed `collides()` as alignment-gated — it is not.
+
+  2. **Collision geometry**: `collides()` runs **every frame** in `update()`, independent of `aligned()`. Its 0.5-cell point-tolerance threshold is sound for visual sprite size (≈10 px = TILE/2 - 1), but the check is sampled (per-frame) on floating-point positions. Missed collisions can occur when entities cross paths between alignment points with perpendicular movement. The actual weakness is the combination of sampled per-frame check + fractional movement, not an alignment gate.
+
+  3. **Ghost door semantics**: Grid value 3 (doors/pen) blocks Pac-Man only (`isWall` line 69). Ghosts traverse doors freely — this is intentional for pen entry/exit at row 12 and tunnel passage. The tunnel row (TUNNEL_ROW=14) has wraparound behavior. Distinguishing intended traversal from genuine off-maze leakage is important for future maintenance.
+
+  All four ghost kinds (blinky 0.07, pinky 0.06, inky 0.055, clyde 0.05 cells/frame) and PACMAN_START/GHOST_STARTS are defined in maze.js. Movement runs in the rAF loop via `update()` calling `movePacman()`/`moveGhost()`. No build/tests exist; verification is manual browser play.
+
+artifacts:
+  - openspec/changes/pacman-gameplay-fix/exploration.md — structured analysis with current state, affected areas, evidence-based approaches, recommendation, risks, and corrected contract.
+next_recommended: proceed to SDD proposal phase to refine dot-eating geometry (continuous dot checks per frame), verify collision geometry with playtesting data, and add explicit ghost door semantics documentation.
+risks:
+  - Dot-eating change: if sweep eats unintended dots, score may feel unfair; mitigation: grid mutation `grid[y][x] = 0` is idempotent, `dotsRemaining` only decrements when a dot is actually found uneaten.
+  - Collision change: expanding `collides()` margins may trigger life loss during legitimate close-pass scenarios; must calibrate to sprite size (TILE/2 - 1 = 9 px). Current 0.5-cell ≈ 10 px is well-calibrated; priority is ensuring per-frame check with correct positional data.
+  - Ghost door behavior: explicit documentation should not change runtime behavior; risk is zero if no code change is made, but future refactors may inadvertently restrict door traversal without this clarity.
+  - Performance: per-frame dot checking on a 28x31 grid with one Pac-Man is negligible for a rAF loop; no measurable impact expected.
+skill_resolution: paths-injected

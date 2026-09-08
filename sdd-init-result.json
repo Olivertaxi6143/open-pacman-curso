@@ -1,0 +1,49 @@
+{
+  "status": "completed",
+  "executive_summary": "SDD initialization for open-pacman-curso. Existing OpenSpec artifacts detected in openspec/. Project is a Vanilla JavaScript HTML5 Canvas Pac-Man MVP with no test runners, build steps, or CI. strict_tdd: false preserved from explicit openspec/config.yaml marker. Engram init marker not found per prior session report. No code modifications made to existing openspec artifacts per the rule requiring approval before updating existing state.",
+  "artifacts": {
+    "project": {
+      "name": "open-pacman-curso",
+      "path": "C:/Users/olive/OneDrive/Escritorio/opencode/05-open-pacman/open-pacman-5f067617c2e1a38be048966ed3ff2960fb428838",
+      "stack": "Vanilla JavaScript, HTML5 Canvas game",
+      "conventions": "Script load order: maze.js → game.js → render.js → main.js (critical; reordering breaks app). Global window coupling: window.MAZE, window.TUNNEL_ROW, window.PACMAN_START, window.GHOST_STARTS, window.createGame, window.update, window.DIRS, window.draw. No build step, no npm, no package.json, no linter, no test framework, no CI. Verification is purely manual (open HTML, play). TILE=20px constant. Grid: 31 rows × 28 cols. Tile types: #=wall(1), .=dot(2), -=pen door(3), ' '=empty(0). PACMAN_START at (13,23). Four ghost starts: blinky(13,14), pinky(14,14), inky(12,14), clyde(15,14). TUNNEL_ROW=14 with wraparound.",
+      "persistence_mode": "openspec"
+    },
+    "openspec_existing": {
+      "config_yaml": "openspec/config.yaml exists with: schema: spec-driven, context: Vanilla JavaScript (browser) Single-page Canvas game, Manual verification (open HTML, play), Imperative game loop, global window coupling. rules.apply: tdd: false, test_command: ''. rules.specs: Given/When/Then, RFC 2119 keywords. rules.design: sequence diagrams, architecture decisions with rationale. rules.tasks: phase grouping, hierarchical numbering, completable in one session. rules.apply guidelines: Follow existing code patterns. rules.verify: test_command: '', build_command: '', coverage_threshold: 0. rules.archive: Warn before merging destructive deltas.",
+      "specs": "openspec/specs/pacman/ - exists but empty (0 lines)",
+      "changes": "openspec/changes/ containing: pacman-gameplay-fix/ (contract.json, exploration.md, research.md, state.yaml) and archive/ (empty directory)",
+      "tdd_false_preserved": "Explicit openspec/config.yaml marker tdd: false preserves strict_tdd: false per decision gate rule."
+    },
+    "atl_registry": ".atl/skill-registry.md with skill index (fingerprint: 90d0a41a856920460e65d9498f079633a804c77a)",
+    "engmar_init": "Init marker not found in current session (per prior session report). Observation ID 661 saved to Engram for context.",
+    "testing_capabilities": {
+      "test_runner": "none detected - manual verification only (open HTML, play)",
+      "test_command": "none - project has no test framework",
+      "coverage": "N/A - no test framework configured",
+      "linter": "N/A - no linter configured",
+      "type_checker": "N/A - no type checker configured",
+      "formatter": "N/A - no formatter configured"
+    }
+  },
+  "next_recommended": "Since openspec/ already exists with established artifacts, do not update without explicit user approval. Next SDD phase options: /sdd-explore to re-explore the pacman-gameplay-fix change, or /sdd-propose to create a delta spec. Per the initialization guard, no further SDD phase should be launched at this time.",
+  "risks": [
+    "Overwriting existing openspec/config.yaml tdd: false marker without explicit user approval - this would violate the existing SDD configuration and decision gate rule.",
+    "Engram init marker not found may affect persistent memory continuity across sessions for this project.",
+    "No test runners exist in the project; strict_tdd: false is the correct fallback - any attempt to set strict_tdd: true would require a workspace-level test command covering every in-scope project, which does not exist.",
+    "Global window coupling in the codebase (window.MAZE, window.TUNNEL_ROW, etc.) may be inadvertently broken by future code changes if not documented.",
+    "The pacman-gameplay-fix change has existing exploration (exploration.md) and contract (contract.json); proceeding without reviewing these may duplicate effort or contradict prior findings."
+  ],
+  "strict_tdd": false,
+  "testing_capability_table": {
+    "test_runner": "none (manual verification only)",
+    "test_command": "none",
+    "coverage_threshold": "N/A",
+    "linter": "none",
+    "type_checker": "none",
+    "formatter": "none"
+  },
+  "persistence_mode": "openspec",
+  "registry_path": ".atl/skill-registry.md",
+  "next_sdd_step": "/sdd-explore - re-explore pacman-gameplay-fix change OR /sdd-propose - create delta spec (require explicit user approval to update existing openspec artifacts)"
+}
