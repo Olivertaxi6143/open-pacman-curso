@@ -1,6 +1,6 @@
 // game.js
-// Estado y reglas. Depende de globals de maze.js: MAZE, TUNNEL_ROW,
-// PACMAN_START, GHOST_STARTS.
+// Game rules depend on maze.js globals: MAZE, TUNNEL_ROW, PACMAN_START, and
+// GHOST_STARTS. Logical cell centers are the movement authority.
 
 const DIRS = {
   left: { x: -1, y: 0 },
@@ -9,19 +9,23 @@ const DIRS = {
   down: { x: 0, y: 1 },
 };
 const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
+const PACMAN_SPEED = 0.08;
+const ACTOR_RADIUS = 0.45;
+const EPSILON = 1e-9;
 
-const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
-const GHOST_SPEED = 0.1;    // 1/10 celda/frame
+const GHOST_SPEEDS = {
+  blinky: 0.07,
+  pinky: 0.06,
+  inky: 0.055,
+  clyde: 0.05,
+};
 
-// Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
-// dots sin destruir el original, y reiniciar.
 function createGame() {
   const grid = MAZE.map( ( row ) => row.slice() );
-  // La celda de inicio de Pacman arranca sin dot.
   grid[ PACMAN_START.y ][ PACMAN_START.x ] = 0;
 
   let dots = 0;
-  for ( const row of grid ) for ( const v of row ) if ( v === 2 ) dots++;
+  for ( const row of grid ) for ( const tile of row ) if ( tile === 2 ) dots++;
 
   return {
     state: 'start',
@@ -29,6 +33,7 @@ function createGame() {
     lives: 3,
     dotsRemaining: dots,
     grid,
+    snapshots: null,
     pacman: {
       x: PACMAN_START.x,
       y: PACMAN_START.y,
@@ -36,225 +41,220 @@ function createGame() {
       nextDir: null,
       speed: PACMAN_SPEED,
     },
-    ghosts: GHOST_STARTS.map( ( g ) => ( {
-      x: g.x,
-      y: g.y,
+    ghosts: GHOST_STARTS.map( ( start ) => ( {
+      x: start.x,
+      y: start.y,
       dir: 'up',
-      speed: GHOST_SPEED,
-      kind: g.kind,
+      speed: GHOST_SPEEDS[ start.kind ] ?? 0.05,
+      kind: start.kind,
+      mode: 'active',
+      scatter: start.scatter,
     } ) ),
   };
 }
 
-function aligned( v ) {
-  return Math.abs( v - Math.round( v ) ) < 1e-3;
+function atCenter( actor ) {
+  return Math.abs( actor.x - Math.round( actor.x ) ) < EPSILON &&
+    Math.abs( actor.y - Math.round( actor.y ) ) < EPSILON;
 }
 
-// Una celda es muro para el actor dado?
-//   pacman: bloqueado por pared (1) y puerta (3)
-//   ghost:  bloqueado solo por pared (1)
-function isWall( grid, x, y, actor ) {
-  if ( y < 0 || y >= grid.length ) return true;
-  if ( x < 0 || x >= grid[ 0 ].length ) return true;
-  const v = grid[ y ][ x ];
-  if ( v === 1 ) return true;
-  if ( v === 3 && actor === 'pacman' ) return true;
-  return false;
+function snapToCenter( actor ) {
+  actor.x = Math.round( actor.x );
+  actor.y = Math.round( actor.y );
 }
 
-// Puede el actor avanzar desde (x,y) en la direccion dir?
-function canMove( grid, x, y, dir, actor ) {
-  const d = DIRS[ dir ];
-  if ( !d ) return false;
-  const tx = x + d.x;
-  const ty = y + d.y;
-  // Tunel: salir por un borde en la fila del tunel siempre es valido.
-  if ( ty === TUNNEL_ROW && ( tx < 0 || tx >= grid[ 0 ].length ) ) return true;
-  return !isWall( grid, tx, ty, actor );
+function isBlocked( grid, x, y, actorType, actor ) {
+  if ( y < 0 || y >= grid.length || x < 0 || x >= grid[ 0 ].length ) return true;
+
+  const tile = grid[ y ][ x ];
+  if ( tile === 1 ) return true;
+  return tile === 3 && ( actorType === 'pacman' || actor.mode !== 'active' );
 }
 
-function wrapTunnel( a, width ) {
-  if ( Math.round( a.y ) === TUNNEL_ROW ) {
-    if ( a.x < 0 ) a.x += width;
-    else if ( a.x >= width ) a.x -= width;
-  }
+function canMove( grid, x, y, dir, actorType, actor ) {
+  const vector = DIRS[ dir ];
+  if ( !vector ) return false;
+
+  const nextX = x + vector.x;
+  const nextY = y + vector.y;
+  if ( nextY === TUNNEL_ROW && ( nextX < 0 || nextX >= grid[ 0 ].length ) ) return true;
+
+  return !isBlocked( grid, nextX, nextY, actorType, actor );
 }
 
-function movePacman( game ) {
-  const p = game.pacman;
-  const grid = game.grid;
-  const width = grid[ 0 ].length;
-
-  if ( aligned( p.x ) && aligned( p.y ) ) {
-    p.x = Math.round( p.x );
-    p.y = Math.round( p.y );
-
-    // Aplicar giro pendiente si es posible.
-    if ( p.nextDir && canMove( grid, p.x, p.y, p.nextDir, 'pacman' ) ) {
-      p.dir = p.nextDir;
-      p.nextDir = null;
-    }
-    // Comer dot.
-    if ( grid[ p.y ][ p.x ] === 2 ) {
-      grid[ p.y ][ p.x ] = 0;
-      game.score += 10;
-      game.dotsRemaining--;
-    }
-    // Si no puede seguir, se detiene en la celda.
-    if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
-  }
-
-  const d = DIRS[ p.dir ];
-  p.x += d.x * p.speed;
-  p.y += d.y * p.speed;
-  wrapTunnel( p, width );
-}
-
-function decideGhost( game, g ) {
-  const grid = game.grid;
-  const p = game.pacman;
-  const pd = DIRS[ p.dir ] || { x: 0, y: 0 };
-
-  const options = Object.keys( DIRS ).filter(
-    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
+function legalDirections( grid, cell, actor, actorType ) {
+  return Object.keys( DIRS ).filter( ( dir ) =>
+    canMove( grid, cell.x, cell.y, dir, actorType, actor )
   );
-  // Sin salida (callejon): permitir el giro de 180.
-  const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
-
-  switch ( g.kind ) {
-    case 'blinky':
-      g.dir = chooseDirTowards( grid, g, { x: Math.round( p.x ), y: Math.round( p.y ) }, choices );
-      break;
-    case 'pinky':
-      g.dir = chooseDirTowards( grid, g, pinkyTarget( Math.round( p.x ), Math.round( p.y ), pd ), choices );
-      break;
-    case 'inky':
-      g.dir = chooseDirTowards( grid, g, inkyTarget( game, Math.round( p.x ), Math.round( p.y ), pd ), choices );
-      break;
-    case 'clyde':
-      g.dir = clydeDecision( grid, g, { x: Math.round( p.x ), y: Math.round( p.y ) }, choices );
-      break;
-    default:
-      // Safe fallback: random among legal moves
-      g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
-  }
 }
 
-// Elegir dirección hacia un objetivo fijo (posición de celda objetivo).
-function chooseDirTowards( grid, ghost, target, choices ) {
+function wrapTunnel( actor, width ) {
+  if ( Math.round( actor.y ) !== TUNNEL_ROW ) return;
+  if ( actor.x < 0 ) actor.x += width;
+  else if ( actor.x >= width ) actor.x -= width;
+}
+
+function distanceToNextCenter( actor, dir ) {
+  if ( dir === 'left' ) return atCenter( actor ) ? 1 : actor.x - Math.floor( actor.x );
+  if ( dir === 'right' ) return atCenter( actor ) ? 1 : Math.ceil( actor.x ) - actor.x;
+  if ( dir === 'up' ) return atCenter( actor ) ? 1 : actor.y - Math.floor( actor.y );
+  return atCenter( actor ) ? 1 : Math.ceil( actor.y ) - actor.y;
+}
+
+function consumeDot( game, cell ) {
+  const row = game.grid[ cell.y ];
+  if ( !row || row[ cell.x ] !== 2 ) return false;
+
+  row[ cell.x ] = 0;
+  game.score += 10;
+  game.dotsRemaining--;
+  return true;
+}
+
+function choosePacmanDirection( game, pacman, cell ) {
+  const legal = legalDirections( game.grid, cell, pacman, 'pacman' );
+  if ( !legal.length ) return null;
+
+  if ( pacman.nextDir && legal.includes( pacman.nextDir ) ) {
+    const turn = pacman.nextDir;
+    pacman.nextDir = null;
+    return turn;
+  }
+  if ( legal.includes( pacman.dir ) ) return pacman.dir;
+
+  return legal.find( ( dir ) => dir !== OPPOSITE[ pacman.dir ] ) ?? legal[ 0 ];
+}
+
+function chooseDirTowards( ghost, target, choices ) {
   let best = choices[ 0 ];
-  let bestDist = Infinity;
+  let bestDistance = Infinity;
   for ( const dir of choices ) {
-    const d = DIRS[ dir ];
-    const nx = ghost.x + d.x;
-    const ny = ghost.y + d.y;
-    const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
-    if ( dist < bestDist ) {
-      bestDist = dist;
+    const vector = DIRS[ dir ];
+    const distance = Math.abs( ghost.x + vector.x - target.x ) +
+      Math.abs( ghost.y + vector.y - target.y );
+    if ( distance < bestDistance ) {
       best = dir;
+      bestDistance = distance;
     }
   }
   return best;
 }
 
-// Pinky: emboscador — objetivo varias celdas adelante de Pac-Man.
-function pinkyTarget( px, py, pd ) {
-  // 4 celdas adelante en la dirección actual de Pac-Man
-  return { x: px + 4 * pd.x, y: py + 4 * pd.y };
+function pinkyTarget( pacman, direction ) {
+  return { x: pacman.x + 4 * direction.x, y: pacman.y + 4 * direction.y };
 }
 
-// Inky: flanqueador — objetivo derivado de "adelante de Pac-Man" + posición de Blinky.
-// Fórmula clásica: target = 2 * (4-ahead) - Blinky_position
-function inkyTarget( game, px, py, pd ) {
-  const blinky = game.ghosts[ 0 ]; // Blinky siempre está en ghosts[0]
-  const ahead = { x: px + 4 * pd.x, y: py + 4 * pd.y };
-  // Double-vector: duplicar el vector "4-ahead" y restar la posición de Blinky
-  const blinkyRounded = { x: Math.round( blinky.x ), y: Math.round( blinky.y ) };
-  return { x: 2 * ahead.x - blinkyRounded.x, y: 2 * ahead.y - blinkyRounded.y };
+function inkyTarget( game, pacman, direction ) {
+  const blinky = game.ghosts[ 0 ];
+  const ahead = pinkyTarget( pacman, direction );
+  return {
+    x: 2 * ahead.x - Math.round( blinky.x ),
+    y: 2 * ahead.y - Math.round( blinky.y ),
+  };
 }
 
-// Clyde: persigue cuando está lejos, se esconde cuando está cerca.
-function clydeDecision( grid, g, p, choices ) {
-  const gx = Math.round( g.x );
-  const gy = Math.round( g.y );
-  const px = p.x;
-  const py = p.y;
-  const dist = Math.abs( gx - px ) + Math.abs( gy - py );
+function ghostTarget( game, ghost ) {
+  const pacman = { x: Math.round( game.pacman.x ), y: Math.round( game.pacman.y ) };
+  const direction = DIRS[ game.pacman.dir ] ?? { x: 0, y: 0 };
 
-  if ( dist > 8 ) {
-    // Persigue a Pac-Man
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = gx + d.x;
-      const ny = gy + d.y;
-      const d2 = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( d2 < bestDist ) {
-        bestDist = d2;
-        best = dir;
-      }
+  if ( ghost.kind === 'pinky' ) return pinkyTarget( pacman, direction );
+  if ( ghost.kind === 'inky' ) return inkyTarget( game, pacman, direction );
+  if ( ghost.kind === 'clyde' ) {
+    const distance = Math.abs( ghost.x - pacman.x ) + Math.abs( ghost.y - pacman.y );
+    return distance > 8 ? pacman : ghost.scatter;
+  }
+  return pacman;
+}
+
+function chooseGhostDirection( game, ghost, cell ) {
+  const legal = legalDirections( game.grid, cell, ghost, 'ghost' );
+  if ( !legal.length ) return null;
+
+  const choices = legal.filter( ( dir ) => dir !== OPPOSITE[ ghost.dir ] );
+  return chooseDirTowards( ghost, ghostTarget( game, ghost ), choices.length ? choices : legal );
+}
+
+function chooseDirectionAtCenter( game, actor, actorType, cell ) {
+  if ( actorType === 'pacman' ) {
+    consumeDot( game, cell );
+    return choosePacmanDirection( game, actor, cell );
+  }
+  return chooseGhostDirection( game, actor, cell );
+}
+
+function advanceActor( game, actor, actorType ) {
+  const width = game.grid[ 0 ].length;
+  let remaining = actor.speed;
+
+  while ( remaining > EPSILON ) {
+    if ( atCenter( actor ) ) {
+      snapToCenter( actor );
+      actor.dir = chooseDirectionAtCenter( game, actor, actorType, { x: actor.x, y: actor.y } );
+      if ( !actor.dir ) return;
     }
-    return best;
-  } else {
-    // Cuando está cerca, ir a su área de scatter (esquina inferior-derecha)
-    const scatterTarget = { x: 27, y: 31 };
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = gx + d.x;
-      const ny = gy + d.y;
-      const d2 = Math.abs( nx - scatterTarget.x ) + Math.abs( ny - scatterTarget.y );
-      if ( d2 < bestDist ) {
-        bestDist = d2;
-        best = dir;
-      }
-    }
-    return best;
+
+    const distance = distanceToNextCenter( actor, actor.dir );
+    const vector = DIRS[ actor.dir ];
+    const step = Math.min( remaining, distance );
+    actor.x += vector.x * step;
+    actor.y += vector.y * step;
+    wrapTunnel( actor, width );
+    remaining -= step;
+
+    if ( step + EPSILON >= distance && atCenter( actor ) ) snapToCenter( actor );
   }
 }
 
-function moveGhost( game, g ) {
-  const grid = game.grid;
-  const width = grid[ 0 ].length;
-
-  if ( aligned( g.x ) && aligned( g.y ) ) {
-    g.x = Math.round( g.x );
-    g.y = Math.round( g.y );
-    decideGhost( game, g );
-    if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
-  }
-
-  const d = DIRS[ g.dir ];
-  g.x += d.x * g.speed;
-  g.y += d.y * g.speed;
-  wrapTunnel( g, width );
+function snapshotActor( actor ) {
+  return Object.freeze( { x: actor.x, y: actor.y, dir: actor.dir } );
 }
 
-function resetPositions( game ) {
-  const p = game.pacman;
-  p.x = PACMAN_START.x;
-  p.y = PACMAN_START.y;
-  p.dir = 'left';
-  p.nextDir = null;
-  game.ghosts.forEach( ( g, i ) => {
-    g.x = GHOST_STARTS[ i ].x;
-    g.y = GHOST_STARTS[ i ].y;
-    g.dir = 'up';
+function snapshotActors( game ) {
+  return Object.freeze( {
+    pacman: snapshotActor( game.pacman ),
+    ghosts: Object.freeze( game.ghosts.map( snapshotActor ) ),
   } );
 }
 
-function collides( a, b ) {
-  return Math.abs( a.x - b.x ) < 0.5 && Math.abs( a.y - b.y ) < 0.5;
+function collidesDuringStep( pacman, ghost, pacmanStart = pacman, ghostStart = ghost ) {
+  const relativeStart = { x: pacmanStart.x - ghostStart.x, y: pacmanStart.y - ghostStart.y };
+  const relativeVelocity = {
+    x: ( pacman.x - pacmanStart.x ) - ( ghost.x - ghostStart.x ),
+    y: ( pacman.y - pacmanStart.y ) - ( ghost.y - ghostStart.y ),
+  };
+  const velocityLength = relativeVelocity.x ** 2 + relativeVelocity.y ** 2;
+  const time = velocityLength === 0 ? 0 : Math.max( 0, Math.min( 1,
+    -( relativeStart.x * relativeVelocity.x + relativeStart.y * relativeVelocity.y ) / velocityLength
+  ) );
+  const separationX = relativeStart.x + relativeVelocity.x * time;
+  const separationY = relativeStart.y + relativeVelocity.y * time;
+  const contactDistance = ACTOR_RADIUS * 2;
+  return separationX ** 2 + separationY ** 2 <= contactDistance ** 2;
+}
+
+function resetPositions( game ) {
+  const pacman = game.pacman;
+  pacman.x = PACMAN_START.x;
+  pacman.y = PACMAN_START.y;
+  pacman.dir = 'left';
+  pacman.nextDir = null;
+  game.ghosts.forEach( ( ghost, index ) => {
+    ghost.x = GHOST_STARTS[ index ].x;
+    ghost.y = GHOST_STARTS[ index ].y;
+    ghost.dir = 'up';
+    ghost.mode = 'active';
+  } );
 }
 
 function update( game ) {
-  movePacman( game );
-  game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
+  game.snapshots = snapshotActors( game );
+  advanceActor( game, game.pacman, 'pacman' );
+  game.ghosts.forEach( ( ghost ) => advanceActor( game, ghost, 'ghost' ) );
 
-  for ( const g of game.ghosts ) {
-    if ( collides( game.pacman, g ) ) {
+  for ( let index = 0; index < game.ghosts.length; index++ ) {
+    const ghost = game.ghosts[ index ];
+    if ( ghost.mode !== 'active' ) continue;
+    if ( collidesDuringStep( game.pacman, ghost, game.snapshots.pacman, game.snapshots.ghosts[ index ] ) ) {
       game.lives--;
       if ( game.lives <= 0 ) {
         game.state = 'lost';
@@ -265,7 +265,7 @@ function update( game ) {
     }
   }
 
-  if ( game.dotsRemaining <= 0 ) game.state = 'won';
+  if ( game.dotsRemaining === 0 ) game.state = 'won';
 }
 
 window.createGame = createGame;

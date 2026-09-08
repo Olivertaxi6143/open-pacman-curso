@@ -55,7 +55,7 @@ const GHOST_STARTS = [
   { x: 13, y: 14, kind: 'blinky' },     // agresor: persigue a Pac-Man directamente
   { x: 14, y: 14, kind: 'pinky' },     // emboscador: ataca varios celdas adelante de Pac-Man
   { x: 12, y: 14, kind: 'inky' },       // flanqueador: objetivo derivado de Pac-Man + fantasma agresivo
-  { x: 15, y: 14, kind: 'clyde' },      // cauteloso: huye cuando está cerca de Pac-Man, persigue cuando está lejos
+  { x: 15, y: 14, kind: 'clyde', scatter: { x: 26, y: 29 } }, // cautious: scatters when close and chases when far
 ];
 
 window.MAZE = MAZE;
